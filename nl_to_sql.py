@@ -10,25 +10,24 @@ st.set_page_config(page_title="⚽ Football Data Explorer", layout="wide")
 # Title
 st.title("⚽ Football Data Explorer")
 
-# User Input
+# Input
 question = st.text_input("Ask me a football question in plain English:")
 
 if question:
     try:
         sql_query = nl_to_sql(question)
 
-        # Connect to DB
+        # Connect DB
         conn = sqlite3.connect("Top_500_players_2024.db")
         df = pd.read_sql_query(sql_query, conn)
         conn.close()
 
         if df.empty:
-            st.warning("No results found. Try rephrasing your question.")
+            st.warning("No results found.")
         else:
-            # Show Data
             st.write("### Results", df)
 
-            # Try plotting if numeric data exists
+            # Plot if numeric data exists
             numeric_cols = df.select_dtypes(include=["number"]).columns
             if len(numeric_cols) >= 1:
                 col_to_plot = numeric_cols[0]
@@ -37,10 +36,10 @@ if question:
                 df[col_to_plot].plot(kind="bar", ax=ax)
                 st.pyplot(fig)
 
-            # Add summary
+            # Summary
             st.write("### Summary")
             st.write(f"The query returned {len(df)} rows.")
 
     except Exception as e:
-        st.error("⚠️ An error occurred while processing your request.")
+        st.error("⚠️ Error occurred while processing your request.")
         st.exception(e)
