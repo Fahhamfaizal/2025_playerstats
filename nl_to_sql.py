@@ -1,45 +1,28 @@
-import streamlit as st
-import sqlite3
-import pandas as pd
-import matplotlib.pyplot as plt
+import os
+from groq import Groq
 
-from nl_to_sql import nl_to_sql
+# Initialize Groq client
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-st.set_page_config(page_title="⚽ Football Data Explorer", layout="wide")
+def nl_to_sql(question: str) -> str:
+    prompt = f"""
+    Convert this question into a valid SQLite SQL query.
+    Table name is `players`.
+    Only return SQL (no explanations, no markdown).
+    If unsure, return: SELECT * FROM players LIMIT 10;
 
-# Title
-st.title("⚽ Football Data Explorer")
+    Question: {question}
+    """
 
-# Input
-question = st.text_input("Ask me a football question in plain English:")
+    response = client.chat.completions.create(
+        model="llama-3.1-70b-versatile",   # ✅ use supported model
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0
+    )
 
-if question:
-    try:
-        sql_query = nl_to_sql(question)
+    sql_query = response.choices[0].message.content.strip()
 
-        # Connect DB
-        conn = sqlite3.connect("Top_500_players_2024.db")
-        df = pd.read_sql_query(sql_query, conn)
-        conn.close()
+    if not sql_query.lower().startswith("select"):
+        raise ValueError("Invalid SQL generated.")
 
-        if df.empty:
-            st.warning("No results found.")
-        else:
-            st.write("### Results", df)
-
-            # Plot if numeric data exists
-            numeric_cols = df.select_dtypes(include=["number"]).columns
-            if len(numeric_cols) >= 1:
-                col_to_plot = numeric_cols[0]
-                st.write(f"### Visualization of `{col_to_plot}`")
-                fig, ax = plt.subplots()
-                df[col_to_plot].plot(kind="bar", ax=ax)
-                st.pyplot(fig)
-
-            # Summary
-            st.write("### Summary")
-            st.write(f"The query returned {len(df)} rows.")
-
-    except Exception as e:
-        st.error("⚠️ Error occurred while processing your request.")
-        st.exception(e)
+    return sql_query
