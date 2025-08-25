@@ -1,38 +1,43 @@
-import os
 import streamlit as st
-from groq import Groq
+import sqlite3
+import pandas as pd
+import matplotlib.pyplot as plt
+import os
 
-def nl_to_sql(question: str) -> str:
-    groq_api_key = os.getenv("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY")
-    if not groq_api_key:
-        st.error("❌ Groq API key not found. Set it in `.env` or `.streamlit/secrets.toml`.")
-        st.stop()
+from nl_to_sql import nl_to_sql
 
-    client = Groq(api_key=groq_api_key)
+st.set_page_config(page_title="Football Data Explorer", layout="wide")
+st.title("⚽ Football Data Explorer")
 
-    prompt = (
-        "Convert this question into a valid SQLite SQL query for the `players` table. "
-        "Return only the SQL (no explanations, markdown, or backticks). "
-        "If unsure, return: SELECT * FROM players LIMIT 10;\n\n"
-        f"Question: {question}"
-    )
+# ✅ Automatically find DB file
+DB_FILENAME = "Top_500_players_2024.db"
+DB_PATH = os.path.join(os.path.dirname(__file__), DB_FILENAME)
 
-    try:
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": "You are a SQL generator."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0
-        )
-        sql_query = response.choices[0].message.content.strip()
-    except Exception as err:
-        st.error("❌ Error from Groq API. Check logs for details.")
-        print("Groq API error:", repr(err))
-        st.stop()
+if not os.path.exists(DB_PATH):
+    st.error(f"❌ Database file '{DB_FILENAME}' not found in app directory.")
+else:
+    question = st.text_input("Ask me a football question in plain English:")
 
-    if not sql_query.lower().startswith("select"):
-        sql_query = "SELECT * FROM players LIMIT 10"
+    if question:
+        try:
+            # Convert natural language → SQL
+            sql_query = nl_to_sql(question)
+            st.write("📝 Generated SQL:", sql_query)
 
-    return sql_query
+            # Connect in read-only mode for safety
+            conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+            df = pd.read_sql_query(sql_query, conn)
+            conn.close()
+
+            # Show results
+            st.subheader("📊 Query Results")
+            st.dataframe(df)
+
+            # Optional plot if numeric
+            if not df.empty and df.select_dtypes(include=["int", "float"]).shape[1] > 0:
+                st.subheader("📈 Visualization")
+                df.plot(kind="bar", figsize=(8,4))
+                st.pyplot(plt)
+
+        except Exception as e:
+            st.error(f"⚠️ SQL execution error: {e}")
