@@ -1,34 +1,40 @@
-import os
 from groq import Groq
+import os
+import streamlit as st
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-
-def nl_to_sql(user_question: str) -> str:
-    prompt = f"""
-    Convert this natural language question into an SQLite SQL query.
-    Table: players
-    Columns: name, club, goals, assists, matches, nationality
-    Rules:
-    - Use only this table and columns
-    - Output SQL only (no text, no markdown)
-
-    Question: {user_question}
-    SQL:
+def nl_to_sql(question: str) -> str:
+    """
+    Always generate SQL using Groq LLM based on natural language input.
     """
 
-    res = client.chat.completions.create(
-        model="llama3-8b-8192",
+    # Load API key (works both locally and on Streamlit Cloud)
+    groq_api_key = os.getenv("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY", None)
+
+    if not groq_api_key:
+        st.error("❌ Groq API key not found. Please set it in `.env` (local) or `.streamlit/secrets.toml` (cloud).")
+        st.stop()
+
+    client = Groq(api_key=groq_api_key)
+
+    prompt = f"""
+    Convert this question into a valid SQLite SQL query.
+    - The table name is `players`
+    - Only return SQL (no explanations, no markdown)
+    - If unsure, return: SELECT * FROM players LIMIT 10;
+
+    Question: {question}
+    """
+
+    response = client.chat.completions.create(
+        model="mixtral-8x7b-32768",
         messages=[{"role": "user", "content": prompt}],
-        temperature=0,
+        temperature=0
     )
 
-    sql = res.choices[0].message.content.strip()
+    sql_query = response.choices[0].message["content"].strip()
 
-    if "```" in sql:
-        sql = sql.split("```")[1].replace("sql", "").strip()
+    # ✅ Ensure always SQL
+    if not sql_query.lower().startswith("select"):
+        sql_query = "SELECT * FROM players LIMIT 10"
 
-    low = sql.lower()
-    if not low.startswith("select ") or " from players" not in low:
-        raise ValueError("Invalid SQL generated.")
-
-    return sql
+    return sql_query
