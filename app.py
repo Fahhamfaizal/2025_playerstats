@@ -1,67 +1,49 @@
-import os
+import streamlit as st
 import sqlite3
 import pandas as pd
 import matplotlib.pyplot as plt
-import streamlit as st
-from groq import Groq
-from dotenv import load_dotenv
+import os
 
 from nl_to_sql import nl_to_sql
 
-# --- Load API Key ---
-load_dotenv()  # load from .env (local)
-groq_api_key = os.getenv("GROQ_API_KEY")
-
-# If running on Streamlit Cloud, use secrets.toml
-if not groq_api_key and "GROQ_API_KEY" in st.secrets:
-    groq_api_key = st.secrets["GROQ_API_KEY"]
-
-if not groq_api_key:
-    st.error("❌ Groq API key not found. Please set it in `.env` (local) or `.streamlit/secrets.toml` (cloud).")
-    st.stop()
-
-# --- Groq Client ---
-client = Groq(api_key=groq_api_key)
-
-# --- Streamlit Config ---
 st.set_page_config(page_title="⚽ Football Data Explorer", layout="wide")
 st.title("⚽ Football Data Explorer")
-st.sidebar.success("Using Groq API ✅")
 
-# --- User Input ---
+# ✅ Path to DB (absolute path to avoid 'unable to open database file')
+DB_PATH = os.path.join(os.path.dirname(__file__), "Top_500_players_2024.db")
+
+def run_query(sql_query):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute(sql_query)
+        rows = cursor.fetchall()
+        cols = [description[0] for description in cursor.description]
+        conn.close()
+        return pd.DataFrame(rows, columns=cols)
+    except Exception as e:
+        st.error(f"⚠️ SQL execution error: {e}")
+        return None
+
+# User input
 question = st.text_input("Ask me a football question in plain English:")
 
 if question:
-    # Convert NL -> SQL
     sql_query = nl_to_sql(question)
-    st.write(f"**🔎 SQL Query:** `{sql_query}`")
 
-    try:
-        # Connect to database
-        conn = sqlite3.connect("database/Top_500_players_2024.db")
-        df = pd.read_sql_query(sql_query, conn)
-        conn.close()
+    st.write("🔎 SQL Query:", sql_query)
 
-        if not df.empty:
-            st.dataframe(df)
+    df = run_query(sql_query)
 
-            # Plot if numeric data
-            if df.select_dtypes(include=["int64", "float64"]).shape[1] > 0:
-                st.write("📊 Visualization")
-                df.plot(kind="bar", figsize=(8,4))
-                st.pyplot(plt)
+    if df is not None and not df.empty:
+        st.dataframe(df)
 
-            # Summary with Groq
-            summary_prompt = f"Summarize these football stats in simple words:\n{df.to_string()}"
-            summary = client.chat.completions.create(
-                messages=[{"role": "user", "content": summary_prompt}],
-                model="mixtral-8x7b-32768"
-            )
-            st.write("📝 Summary:", summary.choices[0].message["content"])
-
-        else:
-            st.warning("No results found for your query.")
-
-    except Exception as e:
-        st.error(f"⚠️ SQL execution error: {e}")
-
+        # Quick visualization if numeric data exists
+        numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
+        if len(numeric_cols) > 0:
+            st.subheader("📊 Quick Visualization")
+            plt.figure(figsize=(8, 4))
+            df[numeric_cols].plot(kind='bar', legend=True)
+            st.pyplot(plt)
+    else:
+        st.warning("⚠️ No results found for this query.")
