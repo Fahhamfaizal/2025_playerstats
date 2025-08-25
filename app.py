@@ -1,78 +1,67 @@
 import os
 import sqlite3
-import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-from nl_to_sql import nl_to_sql
+import streamlit as st
 from groq import Groq
+from dotenv import load_dotenv
 
+from nl_to_sql import nl_to_sql
+
+# --- Load API Key ---
+load_dotenv()  # load from .env (local)
+groq_api_key = os.getenv("GROQ_API_KEY")
+
+# If running on Streamlit Cloud, use secrets.toml
+if not groq_api_key and "GROQ_API_KEY" in st.secrets:
+    groq_api_key = st.secrets["GROQ_API_KEY"]
+
+if not groq_api_key:
+    st.error("❌ Groq API key not found. Please set it in `.env` (local) or `.streamlit/secrets.toml` (cloud).")
+    st.stop()
+
+# --- Groq Client ---
+client = Groq(api_key=groq_api_key)
+
+# --- Streamlit Config ---
 st.set_page_config(page_title="⚽ Football Data Explorer", layout="wide")
 st.title("⚽ Football Data Explorer")
+st.sidebar.success("Using Groq API ✅")
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "football.db")
-conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-
-st.sidebar.success("Using AI (Groq) for NL → SQL + Summaries")
-
+# --- User Input ---
 question = st.text_input("Ask me a football question in plain English:")
 
 if question:
-    try:
-        query = nl_to_sql(question)
-        st.write("### 📝 Generated SQL")
-        st.code(query, language="sql")
+    # Convert NL -> SQL
+    sql_query = nl_to_sql(question)
+    st.write(f"**🔎 SQL Query:** `{sql_query}`")
 
-        df = pd.read_sql_query(query, conn)
+    try:
+        # Connect to database
+        conn = sqlite3.connect("database/Top_500_players_2024.db")
+        df = pd.read_sql_query(sql_query, conn)
+        conn.close()
 
         if not df.empty:
-            st.write("### 📊 Query Results")
-            st.dataframe(df, use_container_width=True)
+            st.dataframe(df)
 
-            # --- Graph ---
-            st.write("### 📈 Visualization")
-            numeric_cols = df.select_dtypes(include=["int64", "float64"]).columns.tolist()
-            if numeric_cols:
-                col = numeric_cols[0]
-                if "name" in df.columns:
-                    fig, ax = plt.subplots(figsize=(6,4))
-                    ax.barh(df["name"], df[col])
-                    ax.set_xlabel(col.capitalize())
-                    ax.set_ylabel("Player")
-                    ax.set_title(f"{col.capitalize()} by Player")
-                    ax.invert_yaxis()
-                    st.pyplot(fig)
-                else:
-                    fig, ax = plt.subplots(figsize=(6,4))
-                    df[col].plot(kind="hist", bins=10, ax=ax)
-                    ax.set_xlabel(col.capitalize())
-                    ax.set_title(f"Distribution of {col}")
-                    st.pyplot(fig)
-            else:
-                st.info("No numeric columns available for graphing.")
+            # Plot if numeric data
+            if df.select_dtypes(include=["int64", "float64"]).shape[1] > 0:
+                st.write("📊 Visualization")
+                df.plot(kind="bar", figsize=(8,4))
+                st.pyplot(plt)
 
-            # --- AI Summary ---
-            st.write("### 🤖 AI Summary")
-            try:
-                prompt = f"""
-                Question: {question}
-                Data (first 20 rows):
-                {df.head(20).to_string(index=False)}
-                Summarize in simple football terms.
-                """
-                res = client.chat.completions.create(
-                    model="llama3-8b-8192",
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0.2,
-                )
-                st.success(res.choices[0].message.content.strip())
-            except Exception as e:
-                st.warning(f"Could not generate summary: {e}")
+            # Summary with Groq
+            summary_prompt = f"Summarize these football stats in simple words:\n{df.to_string()}"
+            summary = client.chat.completions.create(
+                messages=[{"role": "user", "content": summary_prompt}],
+                model="mixtral-8x7b-32768"
+            )
+            st.write("📝 Summary:", summary.choices[0].message["content"])
 
         else:
-            st.warning("No results found for your question.")
+            st.warning("No results found for your query.")
+
     except Exception as e:
         st.error(f"⚠️ SQL execution error: {e}")
-else:
-    st.info("Ask a question about 2024-25 season player stats")
+
