@@ -36,32 +36,37 @@ if q:
             # ==========================
             # Visualization Section
             # ==========================
-            num_cols = df.select_dtypes(include=["number"]).columns
-            if len(num_cols) > 0:
-                col = num_cols[0]   # Pick first numeric column
-                st.subheader("📊 Visualization")
+            numeric_cols = df.select_dtypes(include=["number"]).columns
 
+            if len(numeric_cols) > 0:
+                col = numeric_cols[0]   # Pick first numeric column
+                st.subheader(f"📊 Visualization of {col}")
+
+                # If 'name' column exists, use it for x-axis
                 if "name" in df.columns:
-                    # Show Top 10 for readability
                     df_sorted = df.sort_values(col, ascending=False).head(10)
 
                     fig, ax = plt.subplots(figsize=(8, 4))
                     ax.bar(df_sorted["name"], df_sorted[col], color="skyblue", edgecolor="black")
-                    ax.set_title(f"Top Players by {col.capitalize()}", fontsize=14, weight="bold")
+                    ax.set_title(f"Top 10 Players by {col.capitalize()}")
                     ax.set_ylabel(col.capitalize())
-                    ax.set_xticks(range(len(df_sorted["name"])))
-                    ax.set_xticklabels(df_sorted["name"], rotation=45, ha="right")
+                    ax.set_xlabel("Player")
+                    plt.xticks(rotation=45, ha="right")
 
-                    st.pyplot(fig)   # ✅ Render chart
+                    st.pyplot(fig)   # ✅ Correct rendering
+                    plt.close(fig)   # Prevents matplotlib warnings
+
                 else:
                     fig, ax = plt.subplots(figsize=(6, 3))
-                    ax.bar(df.index, df[col], color="skyblue", edgecolor="black")
+                    ax.bar(df.index.astype(str), df[col], color="skyblue", edgecolor="black")
+                    ax.set_title(f"{col} Values")
+                    ax.set_ylabel(col.capitalize())
                     ax.set_xlabel("Index")
-                    ax.set_ylabel(col)
-                    ax.set_title(f"Values of {col}")
+
                     st.pyplot(fig)
+                    plt.close(fig)
             else:
-                st.info("No numeric columns available for visualization.")
+                st.info("⚠️ No numeric columns available for visualization.")
 
         else:
             st.warning("No results found.")
