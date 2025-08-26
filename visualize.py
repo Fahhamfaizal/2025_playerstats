@@ -1,82 +1,43 @@
-import streamlit as st
+
+   import streamlit as st
 import sqlite3
+import pandas as pd
 import matplotlib.pyplot as plt
 from nl_to_sql import nl_to_sql
-import difflib
 
-DB_PATH = "football.db"
+st.set_page_config(page_title="Football Data Explorer", layout="wide")
+st.title("⚽ Football Data Explorer")
 
-def run_query(sql_query):
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
+st.sidebar.success("Using AI Provider: Groq (Mixtral-8x7b)")
+
+q = st.text_input("Ask me a football question:")
+
+if q:
     try:
-        cur.execute(sql_query)
-        rows = cur.fetchall()
-        columns = [desc[0] for desc in cur.description]
-        return rows, columns
-    except Exception as e:
-        return [], [str(e)]
-    finally:
-        conn.close()
+        sql = nl_to_sql(q)
+        st.code(sql, language="sql")
 
-def find_closest_names(input_name, limit=3):
-    """Find closest matching names from DB if no exact match is found."""
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("SELECT name FROM players")
-    all_names = [row[0] for row in cur.fetchall()]
-    conn.close()
+        con = sqlite3.connect("football.db")
+        df = pd.read_sql_query(sql, con)
+        con.close()
 
-    matches = difflib.get_close_matches(input_name, all_names, n=limit, cutoff=0.4)
-    return matches
+        if not df.empty:
+            st.dataframe(df)
 
-def app():
-    st.title("⚽ Football Stats Explorer")
-    st.write("Ask questions about players (e.g., 'How many goals did Erling Haaland score?')")
+            if df.shape == (1, 1):
+                st.write(f"Answer: **{df.iloc[0,0]}**")
+            else:
+                st.write(f"Returned {df.shape[0]} rows and {df.shape[1]} columns.")
 
-    question = st.text_input("Your Question:")
-
-    if st.button("Ask") and question.strip():
-        sql_query = nl_to_sql(question)
-        st.code(sql_query, language="sql")
-
-        rows, columns = run_query(sql_query)
-
-        if rows:
-            # ✅ Display table
-            st.success("✅ Results found")
-            st.dataframe([dict(zip(columns, row)) for row in rows])
-
-            # ✅ Show graph if numeric
-            numeric_cols = [c for c in columns if all(isinstance(r[i], (int, float)) for i, r in enumerate(rows) if r[i] is not None)]
-            if numeric_cols:
-                st.write("### 📊 Visualization")
-                for col in numeric_cols:
-                    values = [row[columns.index(col)] for row in rows]
-                    labels = [row[0] for row in rows]  # assumes first col is name
-                    plt.figure(figsize=(6, 4))
-                    plt.bar(labels, values)
-                    plt.xlabel("Players")
-                    plt.ylabel(col)
-                    plt.title(f"{col} comparison")
-                    st.pyplot(plt)
-
-            # ✅ Summary
-            if "goals" in columns:
-                total_goals = sum([row[columns.index("goals")] for row in rows if row[columns.index("goals")] is not None])
-                st.info(f"📖 Summary: The selected players scored a total of **{total_goals} goals**.")
-
+            num_cols = df.select_dtypes(include=["int64", "float64"]).columns
+            if len(num_cols) > 0:
+                col = num_cols[0]   # pick first numeric col only
+                plt.figure(figsize=(6,3))
+                plt.bar(df.index, df[col])   # force single-column bar chart
+                plt.xlabel("Index")
+                plt.ylabel(col)
+                st.pyplot(plt)
         else:
-            st.error(f"❌ No data found for: {question}")
-
-            # 🔎 Suggest close matches
-            if "haaland" in question.lower():
-                st.warning("🔍 Checking for close matches...")
-                matches = find_closest_names("Erling Haaland")
-                if matches:
-                    st.write("Did you mean:")
-                    for m in matches:
-                        st.write(f"- {m}")
-
-if __name__ == "__main__":
-    app()
+            st.warning("No results found.")
+    except Exception as e:
+        st.error(e)
