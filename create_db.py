@@ -1,24 +1,26 @@
-import pandas as pd
 import sqlite3
+import pandas as pd
+import os
 
-# File paths
-CSV_FILE = "Top_500_Players_2024.csv"
-DB_FILE = "football.db"
+csv_file = "Top_500_Players_2024.csv"  # ✅ correct file name
 
-def create_database():
-    # Load CSV
-    df = pd.read_csv(CSV_FILE)
+# Step 1: Check if CSV exists
+if not os.path.exists(csv_file):
+    print(f"❌ CSV file not found: {csv_file}")
+    exit()
+else:
+    print(f"✅ Found file: {csv_file}")
 
-    # ✅ Normalize column names: lowercase + replace spaces with underscores
-    df.columns = [c.strip().lower().replace(" ", "_") for c in df.columns]
+# Step 2: Load CSV
+df = pd.read_csv(csv_file)
+print(f"✅ Loaded CSV with {len(df)} rows and {len(df.columns)} columns")
 
-    # Save to SQLite
-    conn = sqlite3.connect(DB_FILE)
-    df.to_sql("players", conn, if_exists="replace", index=False)
-    conn.commit()
-    conn.close()
+# Step 3: Create / connect to SQLite DB
+db_file = "football.db"
+conn = sqlite3.connect(db_file)
 
-    print(f"✅ Database '{DB_FILE}' created with table 'players' ({len(df)} rows).")
+# Step 4: Save to SQL table
+df.to_sql("players", conn, if_exists="replace", index=False)
 
-if __name__ == "__main__":
-    create_database()
+conn.close()
+print(f"✅ Database '{db_file}' created with table 'players' ({len(df)} rows)")
