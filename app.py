@@ -46,7 +46,7 @@ if question:
                 for col in num_cols:
                     if "name" in df.columns:
                         df_sorted = df.sort_values(col, ascending=False).head(10)
-                        fig, ax = plt.subplots(figsize=(8, 4))
+                        fig, ax = plt.subplots(figsize=(6, 2))
                         ax.bar(df_sorted["name"], df_sorted[col], color="skyblue", edgecolor="black")
                         ax.set_title(f"Top Players by {col.capitalize()}", fontsize=14, weight="bold")
                         ax.set_ylabel(col.capitalize())
