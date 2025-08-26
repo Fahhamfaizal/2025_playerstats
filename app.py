@@ -2,7 +2,7 @@ import os, sqlite3
 import pandas as pd
 import streamlit as st
 import matplotlib
-matplotlib.use("Agg")   # ✅ Needed for Streamlit Cloud
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from nl_to_sql import nl_to_sql
 from create_db import create_database
@@ -23,7 +23,6 @@ client = Groq(api_key=api_key)
 st.set_page_config(page_title="⚽ Football Data Explorer", layout="wide")
 st.title("⚽ Football Data Explorer")
 
-# User question
 question = st.text_input("Ask a football question:")
 
 if question:
@@ -41,9 +40,6 @@ if question:
             st.subheader("📋 Query Results")
             st.dataframe(df)
 
-            # ==========================
-            # Visualization
-            # ==========================
             num_cols = df.select_dtypes(include=["number"]).columns.tolist()
             if len(num_cols) > 0:
                 st.subheader("📊 Visualization")
@@ -68,9 +64,6 @@ if question:
             else:
                 st.info("⚠️ No numeric columns available for visualization.")
 
-            # ==========================
-            # AI summary
-            # ==========================
             try:
                 st.subheader("📝 Summary")
                 prompt = f"Question: {question}\n\nData:\n{df.head(10).to_string(index=False)}\n\nWrite a short, clear summary."
