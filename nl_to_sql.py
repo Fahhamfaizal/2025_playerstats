@@ -1,34 +1,37 @@
 import os
 from groq import Groq
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+api_key = os.getenv("GROQ_API_KEY")
+if not api_key:
+    raise ValueError("❌ Missing GROQ_API_KEY. Set it as env var or Streamlit secret.")
+
+client = Groq(api_key=api_key)
 
 def nl_to_sql(user_question: str) -> str:
     prompt = f"""
-    Convert this natural language question into an SQLite SQL query.
+    Convert this into a valid SQLite query.
     Table: players
-    Columns: name, club, goals, assists, matches, nationality
+    Columns:
+    name, position, club, market_value, age, primary_nationality, secondary_nationality,
+    matches_played, goals, assists, yellow_cards, red_cards,
+    substituted_in, substituted_out, second_yellow_cards, own_goals.
+
     Rules:
-    - Use only this table and columns
-    - Output SQL only (no text, no markdown)
+    - Use lowercase column names exactly as above
+    - For player lookups use: WHERE name LIKE '%<player>%'
+    - Return SQL only, no markdown
+    - If unsure: SELECT * FROM players LIMIT 10;
 
     Question: {user_question}
-    SQL:
     """
 
     res = client.chat.completions.create(
-        model="llama3-8b-8192",
+        model="llama-3.1-8b-instant",
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
     )
 
     sql = res.choices[0].message.content.strip()
-
-    if "```" in sql:
-        sql = sql.split("```")[1].replace("sql", "").strip()
-
-    low = sql.lower()
-    if not low.startswith("select ") or " from players" not in low:
-        raise ValueError("Invalid SQL generated.")
-
+    if not sql.lower().startswith("select"):
+        sql = "SELECT * FROM players LIMIT 10;"
     return sql
