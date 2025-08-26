@@ -1,6 +1,8 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
+import matplotlib
+matplotlib.use("Agg")   # ✅ Needed for Streamlit Cloud
 import matplotlib.pyplot as plt
 from nl_to_sql import nl_to_sql
 
@@ -34,35 +36,29 @@ if q:
                 st.write(f"Returned {df.shape[0]} rows and {df.shape[1]} columns.")
 
             # ==========================
-            # Visualization Section
+            # Visualization
             # ==========================
-            numeric_cols = df.select_dtypes(include=["number"]).columns
-
-            if len(numeric_cols) > 0:
-                col = numeric_cols[0]   # Pick first numeric column
+            num_cols = df.select_dtypes(include=["number"]).columns
+            if len(num_cols) > 0:
+                col = num_cols[0]   # Pick first numeric column
                 st.subheader(f"📊 Visualization of {col}")
 
-                # If 'name' column exists, use it for x-axis
                 if "name" in df.columns:
                     df_sorted = df.sort_values(col, ascending=False).head(10)
-
                     fig, ax = plt.subplots(figsize=(8, 4))
                     ax.bar(df_sorted["name"], df_sorted[col], color="skyblue", edgecolor="black")
                     ax.set_title(f"Top 10 Players by {col.capitalize()}")
                     ax.set_ylabel(col.capitalize())
                     ax.set_xlabel("Player")
                     plt.xticks(rotation=45, ha="right")
-
-                    st.pyplot(fig)   # ✅ Correct rendering
-                    plt.close(fig)   # Prevents matplotlib warnings
-
+                    st.pyplot(fig)
+                    plt.close(fig)
                 else:
                     fig, ax = plt.subplots(figsize=(6, 3))
                     ax.bar(df.index.astype(str), df[col], color="skyblue", edgecolor="black")
                     ax.set_title(f"{col} Values")
                     ax.set_ylabel(col.capitalize())
                     ax.set_xlabel("Index")
-
                     st.pyplot(fig)
                     plt.close(fig)
             else:
