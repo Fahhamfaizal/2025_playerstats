@@ -3,35 +3,32 @@ from groq import Groq
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-def nl_to_sql(question: str) -> str:
+def nl_to_sql(user_question: str) -> str:
     prompt = f"""
-    Convert this football question into a valid SQLite SQL query.
-    Table name is `players`.
-    
+    Convert this natural language question into an SQLite SQL query.
+    Table: players
+    Columns: name, club, goals, assists, matches, nationality
     Rules:
-    - Column names are: "Name", "Position", "Club", "Market Value", "Age", "Primary Nationality", "Secondary Nationality",
-      "Matches Played", "Goals", "Assists", "Yellow Cards", "Red Cards", "Substituted In", "Substituted Out",
-      "Second Yellow Cards", "Own Goals".
-    - Always wrap column names in double quotes.
-    - For player names, always use: WHERE "Name" LIKE '%...%'
-    - Only return SQL (no explanations, no markdown).
-    - If unsure, return: SELECT * FROM players LIMIT 10;
+    - Use only this table and columns
+    - Output SQL only (no text, no markdown)
 
-    Question: {question}
+    Question: {user_question}
+    SQL:
     """
 
-    try:
-        response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0
-        )
-        sql_query = response.choices[0].message.content.strip()
+    res = client.chat.completions.create(
+        model="llama3-8b-8192",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0,
+    )
 
-        if not sql_query.lower().startswith("select"):
-            return 'SELECT * FROM players LIMIT 10;'
+    sql = res.choices[0].message.content.strip()
 
-        return sql_query
-    except Exception as e:
-        print(f"⚠️ Groq API Error: {e}")
-        return 'SELECT * FROM players LIMIT 10;'
+    if "```" in sql:
+        sql = sql.split("```")[1].replace("sql", "").strip()
+
+    low = sql.lower()
+    if not low.startswith("select ") or " from players" not in low:
+        raise ValueError("Invalid SQL generated.")
+
+    return sql
