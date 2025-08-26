@@ -1,78 +1,71 @@
-import os
-import sqlite3
-import streamlit as st
+import os, sqlite3
 import pandas as pd
+import streamlit as st
 import matplotlib.pyplot as plt
 from nl_to_sql import nl_to_sql
+from create_db import create_database
 from groq import Groq
+
+DB_PATH = "football.db"
+
+if not os.path.exists(DB_PATH):
+    create_database()
+
+api_key = os.getenv("GROQ_API_KEY")
+if not api_key:
+    st.error("❌ GROQ_API_KEY missing. Set it in your environment or Streamlit secrets.")
+    st.stop()
+
+client = Groq(api_key=api_key)
 
 st.set_page_config(page_title="⚽ Football Data Explorer", layout="wide")
 st.title("⚽ Football Data Explorer")
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "football.db")
-conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-
-st.sidebar.success("Using AI (Groq) for NL → SQL + Summaries")
-
-question = st.text_input("Ask me a football question in plain English:")
+# User question
+question = st.text_input("Ask a football question:")
 
 if question:
     try:
-        query = nl_to_sql(question)
-        st.write("### 📝 Generated SQL")
-        st.code(query, language="sql")
+        sql = nl_to_sql(question)
+        st.code(sql, language="sql")
 
-        df = pd.read_sql_query(query, conn)
+        con = sqlite3.connect(DB_PATH)
+        df = pd.read_sql_query(sql, con)
+        con.close()
 
-        if not df.empty:
-            st.write("### 📊 Query Results")
-            st.dataframe(df, use_container_width=True)
+        if df.empty:
+            st.warning("No results found.")
+        else:
+            st.subheader("📋 Query Results")
+            st.dataframe(df)
 
-            # --- Graph ---
-            st.write("### 📈 Visualization")
-            numeric_cols = df.select_dtypes(include=["int64", "float64"]).columns.tolist()
-            if numeric_cols:
-                col = numeric_cols[0]
-                if "name" in df.columns:
-                    fig, ax = plt.subplots(figsize=(6,4))
-                    ax.barh(df["name"], df[col])
-                    ax.set_xlabel(col.capitalize())
-                    ax.set_ylabel("Player")
-                    ax.set_title(f"{col.capitalize()} by Player")
-                    ax.invert_yaxis()
+            # Auto visualization (only if numeric columns exist)
+            num_cols = df.select_dtypes(include=["number"]).columns.tolist()
+            if "name" in df.columns and len(num_cols) > 0:
+                st.subheader("📊 Visualization")
+                for col in num_cols:
+                    fig, ax = plt.subplots(figsize=(8, 4))
+                    df_sorted = df.sort_values(col, ascending=False).head(10)
+                    ax.bar(df_sorted["name"], df_sorted[col], color="skyblue", edgecolor="black")
+                    ax.set_title(f"Player by {col.capitalize()}", fontsize=14, weight="bold")
+                    ax.set_ylabel(col.capitalize())
+                    ax.set_xticklabels(df_sorted["name"], rotation=45, ha="right")
                     st.pyplot(fig)
-                else:
-                    fig, ax = plt.subplots(figsize=(6,4))
-                    df[col].plot(kind="hist", bins=10, ax=ax)
-                    ax.set_xlabel(col.capitalize())
-                    ax.set_title(f"Distribution of {col}")
-                    st.pyplot(fig)
-            else:
-                st.info("No numeric columns available for graphing.")
 
-            # --- AI Summary ---
-            st.write("### 🤖 AI Summary")
+            # AI summary
             try:
-                prompt = f"""
-                Question: {question}
-                Data (first 20 rows):
-                {df.head(20).to_string(index=False)}
-                Summarize in simple football terms.
-                """
+                st.subheader("📝 Summary")
+                prompt = f"Question: {question}\n\nData:\n{df.head(10).to_string(index=False)}\n\nWrite a short, clear summary."
                 res = client.chat.completions.create(
-                    model="llama3-8b-8192",
-                    messages=[{"role": "user", "content": prompt}],
+                    model="llama-3.1-8b-instant",
+                    messages=[{"role":"user","content":prompt}],
                     temperature=0.2,
                 )
-                st.success(res.choices[0].message.content.strip())
+                st.info(res.choices[0].message.content.strip())
             except Exception as e:
-                st.warning(f"Could not generate summary: {e}")
+                st.warning(f"Summary failed: {e}")
 
-        else:
-            st.warning("No results found for your question.")
     except Exception as e:
-        st.error(f"⚠️ SQL execution error: {e}")
-else:
-    st.info("Ask a question about 2024-25 season player stats")
+        st.error(f"SQL execution error: {e}")
+
+
