@@ -1,42 +1,45 @@
-import streamlit as st
+import os
 import sqlite3
 import pandas as pd
+import streamlit as st
 import matplotlib.pyplot as plt
-from nl_to_sql import nl_to_sql
+from create_db import create_database
 
-st.set_page_config(page_title="Football Data Explorer", layout="wide")
-st.title("⚽ Football Data Explorer")
+# --- Ensure database exists ---
+if not os.path.exists("football.db"):
+    st.warning("⚠️ football.db not found, creating it...")
+    create_database()
 
-st.sidebar.success("Using AI Provider: Groq (Mixtral-8x7b)")
+# --- Connect to DB ---
+conn = sqlite3.connect("football.db")
 
-q = st.text_input("Ask me a football question:")
+st.title("📊 Football Player Stats Visualizer")
 
-if q:
+# User input
+player_name = st.text_input("Enter a player's name (e.g., Lionel Messi):")
+
+if player_name:
     try:
-        sql = nl_to_sql(q)
-        st.code(sql, language="sql")
-
-        con = sqlite3.connect("football.db")
-        df = pd.read_sql_query(sql, con)
-        con.close()
-
+        query = "SELECT * FROM players WHERE Name = ?"
+        df = pd.read_sql_query(query, conn, params=(player_name,))
+        
         if not df.empty:
+            st.success(f"✅ Found stats for {player_name}")
             st.dataframe(df)
 
-            if df.shape == (1, 1):
-                st.write(f"Answer: **{df.iloc[0,0]}**")
-            else:
-                st.write(f"Returned {df.shape[0]} rows and {df.shape[1]} columns.")
+            # --- Visualization ---
+            numeric_cols = ["Goals", "Assists", "Yellow Cards", "Red Cards", "Own Goals"]
+            player_stats = df[numeric_cols].iloc[0]
 
-            num_cols = df.select_dtypes(include=["int64", "float64"]).columns
-            if len(num_cols) > 0:
-                col = num_cols[0]   # pick first numeric col only
-                plt.figure(figsize=(6,3))
-                plt.bar(df.index, df[col])   # force single-column bar chart
-                plt.xlabel("Index")
-                plt.ylabel(col)
-                st.pyplot(plt)
+            fig, ax = plt.subplots()
+            player_stats.plot(kind="bar", ax=ax)
+            ax.set_title(f"{player_name} - Key Stats")
+            ax.set_ylabel("Count")
+            plt.xticks(rotation=45)
+            
+            st.pyplot(fig)
+
         else:
-            st.warning("No results found.")
+            st.error(f"❌ No data found for {player_name}")
     except Exception as e:
-        st.error(e)
+        st.error(f"⚠️ SQL error: {e}")
