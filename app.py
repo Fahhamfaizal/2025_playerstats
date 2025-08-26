@@ -47,7 +47,7 @@ if question:
                     if "name" in df.columns:
                         df_sorted = df.sort_values(col, ascending=False).head(10)
                         fig, ax = plt.subplots(figsize=(6, 2))
-                        ax.bar(df_sorted["name"], df_sorted[col], color="skyblue", edgecolor="black")
+                        ax.bar(df_sorted["name"], df_sorted[col], color="orange", edgecolor="black")
                         ax.set_title(f"Top Players by {col.capitalize()}", fontsize=14, weight="bold")
                         ax.set_ylabel(col.capitalize())
                         ax.set_xticklabels(df_sorted["name"], rotation=45, ha="right")
@@ -55,7 +55,7 @@ if question:
                         plt.close(fig)
                     else:
                         fig, ax = plt.subplots(figsize=(6, 3))
-                        ax.bar(df.index.astype(str), df[col], color="skyblue", edgecolor="black")
+                        ax.bar(df.index.astype(str), df[col], color="orange", edgecolor="black")
                         ax.set_title(f"{col} Values")
                         ax.set_ylabel(col.capitalize())
                         ax.set_xlabel("Index")
@@ -78,3 +78,4 @@ if question:
 
     except Exception as e:
         st.error(f"SQL execution error: {e}")
+
