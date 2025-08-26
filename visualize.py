@@ -2,7 +2,7 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 import matplotlib
-matplotlib.use("Agg")   # ✅ Needed for Streamlit Cloud
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from nl_to_sql import nl_to_sql
 
@@ -11,16 +11,13 @@ st.title("⚽ Football Data Explorer")
 
 st.sidebar.success("Using AI Provider: Groq (Mixtral-8x7b)")
 
-# User input
 q = st.text_input("Ask me a football question:")
 
 if q:
     try:
-        # Convert natural language to SQL
         sql = nl_to_sql(q)
         st.code(sql, language="sql")
 
-        # Run SQL query
         con = sqlite3.connect("football.db")
         df = pd.read_sql_query(sql, con)
         con.close()
@@ -29,18 +26,14 @@ if q:
             st.subheader("📋 Query Results")
             st.dataframe(df)
 
-            # If result is just one cell, show directly
             if df.shape == (1, 1):
                 st.write(f"Answer: **{df.iloc[0,0]}**")
             else:
                 st.write(f"Returned {df.shape[0]} rows and {df.shape[1]} columns.")
 
-            # ==========================
-            # Visualization
-            # ==========================
             num_cols = df.select_dtypes(include=["number"]).columns
             if len(num_cols) > 0:
-                col = num_cols[0]   # Pick first numeric column
+                col = num_cols[0]
                 st.subheader(f"📊 Visualization of {col}")
 
                 if "name" in df.columns:
